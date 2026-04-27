@@ -55,3 +55,16 @@ Once complete, open the `results/` folder! You'll find:
 * **`pbmc_integrated.h5ad`**: The final processed, batch-corrected single-cell dataset.
 * **`cell_type_assignments.csv`**: A spreadsheet mapping autonomous machine-learning predictions vs clustering.
 * **`multiqc_report.html` & `scanpy_analysis.log`**: Overall pipeline run status and terminal trace logs.
+
+### Pipeline Visualizations
+
+Successfully integrating and clustering the ~4,000 cells reveals multiple distinct populations.
+
+**1. Highly Variable Gene Dispersion (Harmony Integration)**
+![Gene Dispersion](assets/filter_genes_dispersion_integrated.png)
+
+**2. Dynamic Leiden Resolutions (Granularity Control)**
+![Leiden Resolutions](assets/umap_leiden_resolutions.png)
+
+**3. Autonomous CellTypist Annotations**
+![CellTypist Predictions](assets/umap_celltypist.png)
