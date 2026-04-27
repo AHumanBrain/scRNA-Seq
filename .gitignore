@@ -1,0 +1,22 @@
+# Nextflow intermediate files
+.nextflow/
+work/
+.nextflow.log*
+
+# Result directories
+results/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local data / models
+pbmc3k.tar.gz
+pbmc_1k_v3_filtered_feature_bc_matrix.tar.gz
+pbmc3k_data/
+pbmc1k_data/
+scanpy_stats_mqc.tsv
+
+# IDE files
+.vscode/
+.idea/
