@@ -1,62 +1,170 @@
-# Dockerized scRNA-Seq Nextflow Pipeline
+# 🧬 scRNA-Seq: Full-Stack Single-Cell RNA Sequencing Pipeline
 
-This repository contains a reproducible, scalable Nextflow pipeline for Single-Cell RNA-Seq analysis. Built with `scanpy`, it handles data fetching, doublet detection, dataset integration, auto-annotation, and clustering out-of-the-box.
+A reproducible, Dockerized **Nextflow** pipeline that takes you from raw sequencing output all the way to publication-ready figures. Auto-detects your starting point and runs only the stages you need.
 
-## Features Enclosed
-* **Scrublet:** Automated doublet detection algorithms
-* **Harmony Integration:** Built-in dual-dataset merging and batch effect removal
-* **CellTypist:** Applies machine-learning pre-trained models for autonomous cell type prediction
-* **Dynamic Resolutions:** Loops multiple Leiden resolutions mapping granularity structures
-* **MultiQC Logging:** Comprehensive outputs wrapper for review
-* **scVelo (Drafted):** Trajectory code is provided but commented out due to RAM limits (requires specific `.loom` spliced inputs!)
+## ✨ Features
 
-## Pipeline Data Flow Diagram
+| Category | Feature | Tool |
+|---|---|---|
+| **Demultiplexing** | BCL → FASTQ conversion | `bcl2fastq` v2.20 |
+| **Read QC** | Per-base quality, adapter content | `FastQC` v0.12 |
+| **Alignment** | FASTQ → count matrix (UMI-aware) | `STARsolo` v2.7.11b |
+| **Doublet Detection** | Computational doublet removal | `Scrublet` |
+| **Batch Correction** | Multi-dataset integration | `Harmony` |
+| **Clustering** | Multi-resolution community detection | Leiden (0.3, 0.5, 0.8) |
+| **Auto-Annotation** | ML-based cell type prediction | `CellTypist` (Immune_All_Low) |
+| **Trajectory** | RNA velocity (drafted, requires .loom) | `scVelo` (commented out) |
+| **Reporting** | Aggregated QC summary | `MultiQC` |
+
+> **Species:** This pipeline defaults to **human (GRCh38)**. Mouse (mm10) support is not included but can be added by providing a mouse genome FASTA + GTF to the `--genome_fasta` and `--genome_gtf` parameters.
+
+---
+
+## 🔄 Pipeline Flow
+
 ```mermaid
 flowchart TD
-    A[Internet/10x Genomics] -->|Wget| B(FETCH_DATA Process)
-    B --> C{Raw PBMC 3K Matrix}
-    B --> D{Raw PBMC 1K Matrix}
-    C --> E[SCANPY_ANALYSIS]
-    D --> E
-    E --> F(Concat & Scrublet Doublet Detection)
-    F --> G(QC, Normalize, HVG)
-    G --> H(Harmony Integration)
-    H --> I(PCA & Leiden Clustering)
-    H --> J(CellTypist Auto-Annotation)
-    I --> K[Export outputs]
-    J --> K
-    K --> L[results/figures_and_matrices]
-    K --> M(MultiQC Wrapper)
-    M --> N[multiqc_report.html]
+    subgraph entry["🎯 Auto-Detect Entry Point"]
+        BCL["🧬 BCL Run Folder<br/><code>--bcl_dir</code>"]
+        FQ["📄 FASTQ Files<br/><code>--fastq_dir</code>"]
+        MTX["📊 Count Matrix<br/><code>--matrix_dir</code>"]
+        DEMO["🌐 Demo Mode<br/><i>default</i>"]
+    end
+
+    subgraph s1["Stage 1: Demultiplexing"]
+        B2F["bcl2fastq<br/><small>BCL → FASTQ</small>"]
+    end
+
+    subgraph s2["Stage 2: Read QC"]
+        QC["FastQC<br/><small>Quality reports</small>"]
+    end
+
+    subgraph s3["Stage 3: Alignment"]
+        IDX["STAR genomeGenerate<br/><small>Build genome index</small>"]
+        STAR["STARsolo<br/><small>FASTQ → MEX matrix</small>"]
+    end
+
+    subgraph s4["Stage 4: Integrated Analysis"]
+        direction TB
+        SCR["Scrublet<br/><small>Doublet detection</small>"]
+        QCF["QC Filtering<br/><small>MT%, gene counts</small>"]
+        HVG["HVG Selection<br/><small>Feature selection</small>"]
+        HAR["Harmony<br/><small>Batch correction</small>"]
+        LEI["Leiden Clustering<br/><small>res 0.3, 0.5, 0.8</small>"]
+        CT["CellTypist<br/><small>Auto-annotation</small>"]
+    end
+
+    subgraph s5["Stage 5: Reporting"]
+        MQC["MultiQC<br/><small>Aggregate reports</small>"]
+    end
+
+    BCL --> B2F --> QC
+    FQ --> QC
+    QC --> STAR
+    IDX --> STAR
+    STAR --> SCR
+    MTX --> SCR
+    DEMO --> SCR
+    SCR --> QCF --> HVG --> HAR --> LEI --> CT --> MQC
+
+    style entry fill:#1a1a2e,stroke:#16213e,color:#e0e0e0
+    style s4 fill:#0f3460,stroke:#16213e,color:#e0e0e0
 ```
 
-## Quick Start & Installation
+### Files at Each Stage
 
-### Requirements
-* Nextflow installed locally (`curl -s https://get.nextflow.io | bash`)
-* Docker installed and running
+| Stage | Input Files | Output Files | Tool |
+|---|---|---|---|
+| **1. Demultiplex** | `RunInfo.xml`, `SampleSheet.csv`, `*.bcl` | `*_R1_001.fastq.gz`, `*_R2_001.fastq.gz` | bcl2fastq |
+| **2. Read QC** | `*.fastq.gz` | `*_fastqc.html`, `*_fastqc.zip` | FastQC |
+| **3. Alignment** | `*.fastq.gz`, genome index, barcode whitelist | `barcodes.tsv`, `features.tsv`, `matrix.mtx` | STARsolo |
+| **4. Analysis** | MEX matrix directory | `figures/`, `*.h5ad`, `*.csv` | Scanpy + extensions |
+| **5. Reporting** | All QC outputs | `multiqc_report.html` | MultiQC |
 
-### 1. Build the Pipeline Environment
-Bake all the python dependencies into your Docker image. This uses the `Dockerfile` to create a virtual, self-contained run environment without dirtying your host OS.
+---
+
+## 💻 Resource Requirements
+
+| Stage | Process | RAM | CPUs | Runs on Laptop? |
+|---|---|---|---|---|
+| 0 | `FETCH_DATA` (demo) | 1 GB | 1 | ✅ Yes |
+| 1 | `BCL2FASTQ` | **64 GB** | 16 | ❌ Server/Cloud |
+| 2 | `FASTQC` | 4 GB | 4 | ✅ Yes |
+| 3a | `STAR_INDEX` | **32 GB** | 8 | ❌ Server/Cloud |
+| 3b | `STARSOLO` | **32 GB** | 8 | ❌ Server/Cloud |
+| 4 | `SCANPY_ANALYSIS` | 5 GB | 2 | ✅ Yes |
+| 5 | `MULTIQC` | 2 GB | 1 | ✅ Yes |
+
+> ⚠️ **Local machines (≤12 GB RAM):** Use `-profile local` and start from a pre-computed matrix (`--matrix_dir`) or demo mode. Stages 1 and 3 require a server with ≥32 GB RAM.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+* **Docker** installed and running
+* **Nextflow** installed (`curl -s https://get.nextflow.io | bash`)
+
+### 1. Build the Analysis Container
 ```bash
 docker build -t scanpy-analysis:latest .
 ```
 
-### 2. Run the Analysis
-Launch Nextflow. It will orchestrate downloading the PBMC sets and executing the Scanpy pipeline inside the container.
+### 2. Choose Your Entry Point
+
+#### Demo Mode (no data needed — downloads 10x PBMC datasets)
 ```bash
-nextflow run main.nf
+nextflow run main.nf -profile local
 ```
 
-### Outputs
-Once complete, open the `results/` folder! You'll find:
-* **`figures/`**: Contains side-by-side UMAP clustering and marker visualization plots.
-* **`data/`**: The raw PBMC 1K and 3K cellranger datasets fetched by the pipeline, stored for your convenience.
-* **`pbmc_integrated.h5ad`**: The final processed, batch-corrected single-cell dataset.
-* **`cell_type_assignments.csv`**: A spreadsheet mapping autonomous machine-learning predictions vs clustering.
-* **`multiqc_report.html` & `scanpy_analysis.log`**: Overall pipeline run status and terminal trace logs.
+#### Start from Count Matrix (skip all upstream)
+```bash
+nextflow run main.nf -profile local \
+    --matrix_dir /path/to/filtered_feature_bc_matrix
+```
 
-### Pipeline Visualizations
+#### Start from FASTQs (requires ≥32 GB RAM)
+```bash
+nextflow run main.nf -profile server \
+    --fastq_dir /path/to/fastqs/ \
+    --genome_fasta /path/to/GRCh38.fa \
+    --genome_gtf /path/to/gencode.v44.gtf
+```
+
+#### Start from BCL (full pipeline, requires ≥64 GB RAM)
+```bash
+nextflow run main.nf -profile server \
+    --bcl_dir /path/to/sequencing_run/ \
+    --sample_sheet /path/to/SampleSheet.csv \
+    --genome_fasta /path/to/GRCh38.fa \
+    --genome_gtf /path/to/gencode.v44.gtf
+```
+
+#### Using a Pre-Built STAR Index (skip genome indexing)
+```bash
+nextflow run main.nf -profile server \
+    --fastq_dir /path/to/fastqs/ \
+    --star_index /path/to/star_index/
+```
+
+### 3. View Results
+All outputs are published to the `results/` directory:
+
+| Path | Contents |
+|---|---|
+| `results/figures/` | UMAP plots, QC violin plots, marker visualizations |
+| `results/data/` | Raw datasets (demo mode only) |
+| `results/fastqs/` | Demultiplexed FASTQ files (BCL entry only) |
+| `results/fastqc/` | FastQC HTML reports (FASTQ/BCL entry) |
+| `results/starsolo/` | STARsolo count matrices and BAMs (FASTQ/BCL entry) |
+| `results/pbmc_integrated.h5ad` | Final annotated AnnData object |
+| `results/cell_type_assignments.csv` | Cell type predictions + cluster labels |
+| `results/multiqc_report.html` | Aggregated QC report |
+| `results/scanpy_analysis.log` | Full analysis terminal log |
+
+---
+
+## 📊 Pipeline Visualizations
 
 Successfully integrating and clustering the ~4,000 cells reveals multiple distinct populations.
 
@@ -71,3 +179,43 @@ Successfully integrating and clustering the ~4,000 cells reveals multiple distin
 
 **4. Batch Integration Comparison**
 ![Batch Integration](assets/umap_integration_batch.png)
+
+---
+
+## 📁 Sample Sheet Template
+
+For multi-sample FASTQ runs, create a CSV with the following format (see `assets/sample_sheet_template.csv`):
+
+```csv
+sample_id,fastq_1,fastq_2
+PBMC_3k,/path/to/PBMC_3k_S1_L001_R1_001.fastq.gz,/path/to/PBMC_3k_S1_L001_R2_001.fastq.gz
+PBMC_1k,/path/to/PBMC_1k_S2_L001_R1_001.fastq.gz,/path/to/PBMC_1k_S2_L001_R2_001.fastq.gz
+```
+
+---
+
+## 🧬 10x Barcode Whitelist
+
+STARsolo requires a barcode whitelist for cell barcode matching. The pipeline automatically downloads the **10x Chromium v3** whitelist (`3M-february-2018.txt`) at runtime if not found locally.
+
+To pre-download manually:
+```bash
+wget https://github.com/10XGenomics/cellranger/raw/master/lib/python/cellranger/barcodes/3M-february-2018.txt.gz
+gunzip 3M-february-2018.txt.gz
+mv 3M-february-2018.txt assets/whitelists/
+```
+
+---
+
+## 🔧 Configuration Profiles
+
+| Profile | Command | Use Case |
+|---|---|---|
+| `local` | `-profile local` | Laptops/desktops (≤12 GB RAM). Demo mode and matrix entry only. |
+| `server` | `-profile server` | HPC/cloud (≥64 GB RAM). Full pipeline from BCL or FASTQ. |
+
+---
+
+## 📝 License
+
+This project is open source. The upstream tools (bcl2fastq, STAR, FastQC) are subject to their respective licenses.

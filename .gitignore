@@ -17,6 +17,23 @@ pbmc3k_data/
 pbmc1k_data/
 scanpy_stats_mqc.tsv
 
+# Upstream sequencing files (large)
+*.bcl
+*.bcl.gz
+*.fastq
+*.fastq.gz
+*.bam
+*.bam.bai
+*.sam
+*.loom
+Solo.out/
+star_index_cache/
+refdata-*/
+
 # IDE files
 .vscode/
 .idea/
+
+# OS files
+.DS_Store
+Thumbs.db
