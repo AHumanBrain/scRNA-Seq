@@ -70,4 +70,4 @@ Successfully integrating and clustering the ~4,000 cells reveals multiple distin
 ![CellTypist Predictions](assets/umap_celltypist.png)
 
 **4. Batch Integration Comparison**
-![Batch Integration](assets/umap_integrations_batch.png)
+![Batch Integration](assets/umap_integration_batch.png)
